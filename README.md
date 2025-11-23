@@ -1,97 +1,106 @@
-# 🧠 Memora — Personal Memory AI Assistant
+# 🧠 Memora — AI-Augmented Memory Assistant
 
-> “Your second brain — private, intelligent, and always with you.”
+![Java](https://img.shields.io/badge/Java-21-orange)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.3-green)
+![Architecture](https://img.shields.io/badge/Architecture-Event--Driven-blue)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED)
 
-Memora is an open-source personal memory augmentation assistant.  
-It records your thoughts, conversations, notes, and reveals them via intelligent search and context — all while keeping your privacy intact.
+> **“Your second brain — private, intelligent, and scalable.”**
+
+Memora is an open-source memory augmentation platform designed to ingest, index, and retrieve human memories using **RAG (Retrieval-Augmented Generation)** architecture.
+
+Unlike simple note-taking apps, Memora treats human memory as a high-throughput data stream, processing voice, text, and visual inputs asynchronously to build a queryable semantic vector store.
 
 ---
 
-## 🚀 Vision
+## 🏗️ System Architecture
 
-Humans forget.  
-Memora helps you remember — across voice, text, documents — in the form of intelligent, searchable memory.
+Memora is built as a **Distributed Event-Driven System** to ensure scalability and decoupling between ingestion and processing.
 
----
-
-## 🧩 Architecture (v0.1)
-
+```mermaid
+graph LR
+    User[Client App] -->|REST/gRPC| API[Ingestion API]
+    API -->|Async Event| Kafka[Apache Kafka]
+    
+    subgraph "Async Processing"
+        Kafka -->|Topic: ingest-text| Consumer[Spring AI Consumer]
+        Consumer -->|Embedding Model| LLM[Ollama / OpenAI]
+        Consumer -->|Vector + Metadata| DB[(PostgreSQL pgvector)]
+    end
+    
+    subgraph "Retrieval (RAG)"
+        User -->|Query| Search[Search Service]
+        Search -->|Semantic Search| DB
+        Search -->|Context Injection| LLM
+        LLM -->|Answer| User
+    end
 ```
-[Device / Mobile] → [Local Agent / Backend] → [AI / NLP / Embedding] → [Vector DB] → [Frontend UI / Search]
-```
 
-Components:
-- Frontend UI (React / Tauri / Electron)
-- Backend agent (Spring Boot / Node)
-- NLP & embedding (OpenAI embeddings or local model)
-- Vector database (Weaviate / Qdrant)
-- Local storage (SQLite / encrypted files)
-
----
-
-## 🧰 Core Features
-
-- Voice / text memory capture
-- Semantic search (retrieve by meaning)
-- Timeline view of memories
-- Daily / meeting summarization
-- Local-first, privacy-first design
+### Key Engineering Decisions
+* **Event-Driven Ingestion:** Uses **Apache Kafka** to handle high-throughput ingestion without blocking the user interface.
+* **Vector Storage:** Leverages **PostgreSQL (pgvector)** to maintain transactional consistency (ACID) between metadata and vector embeddings, avoiding the complexity of a separate vector DB.
+* **Abstraction Layer:** Built on **Spring AI** to swap underlying models (Ollama, OpenAI, Mistral) without code changes.
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Layer | Technology |
-|-------|-------------|
-| Frontend | React, TypeScript, Tauri or Electron |
-| Backend | Spring Boot (Java 23) or Node.js |
-| AI / NLP | OpenAI embeddings / local embedding models |
-| Vector DB | Qdrant / Weaviate |
-| Storage | PostgreSQL / SQLite / encrypted file store |
-| Infrastructure | Docker Compose → Kubernetes (later) |
+**Core Backend**
+* **Language:** Java 21 (Records, Virtual Threads)
+* **Framework:** Spring Boot 3.3
+* **AI Integration:** Spring AI (0.8.x)
+
+**Data & Infrastructure**
+* **Streaming:** Apache Kafka (Kraft mode - Zookeeper-less)
+* **Database:** PostgreSQL 16 + `pgvector` extension
+* **Orchestration:** Docker Compose (Local), Kubernetes (Target)
+* **Observability:** OpenTelemetry + Grafana (Planned)
 
 ---
 
-## 🔏 Privacy Principles
+## 🚀 Getting Started (Local Dev)
 
-- All data processed locally
-- Encrypted by default
-- Optional sync with end-to-end encryption
-- Full user control over data retention and deletion
+We use Docker Compose to spin up the entire infrastructure (DB, Broker, API).
 
----
+### Prerequisites
+* Docker & Docker Compose
+* Java 21 SDK
+* Maven
 
-## 🛤️ Roadmap
+### Run the stack
+```bash
+# 1. Clone the repository
+git clone [https://github.com/ton-profil/memora.git](https://github.com/ton-profil/memora.git)
+cd memora
 
-| Phase | Goal |
-|-------|------|
-| Phase 1 | MVP prototype with local memory + search |
-| Phase 2 | UI / chat interface + summaries |
-| Phase 3 | Encrypted sync + mobile / web app |
-| Phase 4 | Integrations (Gmail, Notion, etc.) |
-| Phase 5 | Cognitive reasoning layer + context awareness |
+# 2. Start Infrastructure (Kafka + Postgres)
+docker-compose up -d
 
----
-
-## 🧭 Example Usage
+# 3. Run the App
+./mvnw spring-boot:run
 
 ```
-memora add "Meeting with Alice about IoT architecture"
-memora search "What did Alice say about scaling Kafka?"
-memora summarize week
-```
+
+## 🧰 Core Features (MVP)
+
+- [x] **Async Ingestion Pipeline:** Decoupled write path via Kafka topics.
+- [x] **Semantic Search:** Vector-based retrieval using Cosine Similarity.
+- [ ] **Multi-Modal Support:** Audio transcription (Whisper) pipeline.
+- [ ] **Privacy-First:** Support for local LLMs (Llama 3 via Ollama).
 
 ---
 
-## 👤 About the Author
+## 👤 Author
 
-**Mohamed El Brik**  
-Java / Cloud / Kafka Consultant @ Zenika  
-Building the bridge between human memory and AI augmentation
+**Mohamed El Brik**
+*Senior Software Engineer & Tech Lead @ Zenika / Decathlon*
+
+Building scalable backends, putting Kafka in production, and exploring the intersection of distributed systems and GenAI.
+
+[LinkedIn](https://www.linkedin.com/in/mohamed-elbrik)
 
 ---
 
 ## 📜 License
 
-MIT License — 2025  
-“Your mind, your memory, your privacy.”
+MIT License — 2025

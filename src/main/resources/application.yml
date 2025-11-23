@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: memora-core
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/memora_db
+    username: memora
+    password: memora
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update # En prod, on mettra 'validate'
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    properties:
+      spring:
+        json:
+          trusted:
+            packages: "com.memora.domain"
+  ai:
+    openai:
+      api-key: "sk-dummy-key-for-local-dev"
+memora:
+  kafka:
+    topics:
+      ingest: "memora-ingest-events-v1"
