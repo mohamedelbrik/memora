@@ -18,14 +18,22 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-    properties:
-      spring:
-        json:
-          trusted:
-            packages: "com.memora.domain"
+      properties:
+        spring.json.add.type.headers: true
+    consumer:
+      group-id: memora-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.memora.domain"
   ai:
-    openai:
-      api-key: "sk-dummy-key-for-local-dev"
+    ollama:
+      base-url: http://localhost:11434 # L'adresse par défaut d'Ollama
+      chat:
+        model: mistral # Le modèle pour répondre
+      embedding:
+        model: nomic-embed-text # Le modèle pour vectoriser
 memora:
   kafka:
     topics:
