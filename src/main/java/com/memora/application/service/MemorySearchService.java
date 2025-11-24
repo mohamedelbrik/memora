@@ -19,6 +19,6 @@ public class MemorySearchService implements SearchMemoryUseCase {
     @Override
     public List<Memory> search(String query) {
         // Règle métier : on veut les 5 plus pertinents avec un score > 0.5
-        return memoryRepository.findSimilar(query, 10, 0.0);
+        return memoryRepository.findSimilar(query, 5, 0.3);
     }
 }

@@ -19,7 +19,6 @@ public class KafkaEventPublisherAdapter implements EventPublisher {
     private final KafkaTemplate<String, MemoryEvent> kafkaTemplate;
     private final String topicName;
 
-    // On injecte le nom du topic depuis la config (application.yml) pour ne pas le hardcoder
     public KafkaEventPublisherAdapter(
             KafkaTemplate<String, MemoryEvent> kafkaTemplate,
             @Value("${memora.kafka.topics.ingest}") String topicName
@@ -30,10 +29,6 @@ public class KafkaEventPublisherAdapter implements EventPublisher {
 
     @Override
     public void publish(MemoryEvent event) {
-        // 1. Définition de la Clé de Partition (Partition Key)
-        // CRUCIAL : Tous les événements d'un même utilisateur doivent aller dans la même partition 
-        // pour garantir l'ordre de traitement.
-        // On récupère le user_id des métadonnées, sinon on utilise l'event ID par défaut.
         String key = event.payload().metadata().getOrDefault("user_id", event.eventId().toString());
 
         log.debug("Sending event [{}] to topic [{}] with key [{}]", event.eventId(), topicName, key);

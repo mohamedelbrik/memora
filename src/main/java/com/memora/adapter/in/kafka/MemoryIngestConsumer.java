@@ -16,7 +16,7 @@ public class MemoryIngestConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(MemoryIngestConsumer.class);
 
-    private final EmbeddingModel embeddingModel; // L'interface Spring AI (Ollama ici)
+    private final EmbeddingModel embeddingModel;
     private final MemoryRepository memoryRepository;
 
     public MemoryIngestConsumer(EmbeddingModel embeddingModel, MemoryRepository memoryRepository) {
@@ -24,7 +24,6 @@ public class MemoryIngestConsumer {
         this.memoryRepository = memoryRepository;
     }
 
-    // On écoute le topic défini dans application.yml
     @KafkaListener(topics = "${memora.kafka.topics.ingest}", groupId = "memora-group")
     public void process(MemoryEvent event) {
         log.info("🧠 Processing memory event: {}", event.eventId());
@@ -32,13 +31,11 @@ public class MemoryIngestConsumer {
         try {
             String content = event.payload().content();
 
-            // 1. EMBEDDING (Direct et Optimisé)
-            // Spring AI 1.0.0+ renvoie directement un float[], plus besoin de convertir !
+            // Spring AI 1.0.0+ returns a float[] directly, no need to convert!
             float[] vector = embeddingModel.embed(content);
 
             log.debug("Computed embedding vector size: {}", vector.length);
 
-            // 2. PERSISTANCE
             memoryRepository.save(event, vector);
 
             log.info("✅ Memory [{}] fully processed and indexed.", event.eventId());
