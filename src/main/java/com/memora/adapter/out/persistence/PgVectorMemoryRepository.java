@@ -1,15 +1,19 @@
 package com.memora.adapter.out.persistence;
 
 import com.memora.application.port.out.MemoryRepository;
+import com.memora.domain.Memory;
 import com.memora.domain.MemoryEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
+import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Component
 public class PgVectorMemoryRepository implements MemoryRepository {
@@ -47,5 +51,30 @@ public class PgVectorMemoryRepository implements MemoryRepository {
         vectorStore.add(List.of(document));
         
         log.info("💾 Memory [{}] saved to Postgres with Metadata", event.eventId());
+    }
+
+    @Override
+    public List<Memory> findSimilar(String query, int limit, double minScore) {
+        // Appel magique à Spring AI + Postgres
+        List<Document> documents = vectorStore.similaritySearch(
+                SearchRequest.query(query)
+                        .withTopK(limit) // Nombre de résultats max
+                        .withSimilarityThreshold(minScore) // Score minimum (0.0 à 1.0)
+        );
+
+        // Mapping Document (Spring AI) -> Memory (Domain)
+        return documents.stream()
+                .map(doc -> new Memory(
+                        UUID.fromString(doc.getId()),
+                        doc.getContent(),
+                        doc.getMetadata(),
+                        // --- CORRECTION ICI ---
+                        // On cast en Number d'abord pour gérer Float ou Double sans planter
+                        doc.getMetadata().containsKey("distance")
+                                ? 1.0 - ((Number) doc.getMetadata().get("distance")).doubleValue()
+                                : null,
+                        null
+                ))
+                .collect(Collectors.toList());
     }
 }
