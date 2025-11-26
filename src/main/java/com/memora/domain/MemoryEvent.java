@@ -15,7 +15,7 @@ public record MemoryEvent(
     ContentType type,
     MemoryPayload payload
 ) {
-    // Constructeur compact pour valider les données à la création (Design Pattern "Fail Fast")
+    // Compact constructor for validating data at creation (Design Pattern "Fail Fast")
     public MemoryEvent {
         if (eventId == null) eventId = UUID.randomUUID();
         if (timestamp == null) timestamp = Instant.now();

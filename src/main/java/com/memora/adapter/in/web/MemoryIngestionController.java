@@ -33,9 +33,6 @@ public class MemoryIngestionController {
 
         UUID memoryId = ingestMemoryUseCase.ingest(command);
 
-        // 3. Réponse 202 Accepted
-        // Pourquoi 202 ? Parce que le traitement est asynchrone (Kafka).
-        // On dit au client : "J'ai bien reçu, je m'en occupe", mais ce n'est pas encore "fini".
         return ResponseEntity.accepted().body(Map.of("id", memoryId));
     }
 }

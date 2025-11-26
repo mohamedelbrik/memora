@@ -33,19 +33,18 @@ public class KafkaEventPublisherAdapter implements EventPublisher {
 
         log.debug("Sending event [{}] to topic [{}] with key [{}]", event.eventId(), topicName, key);
 
-        // 2. Envoi Asynchrone
+        //Asynchronous Sending
         CompletableFuture<SendResult<String, MemoryEvent>> future = 
             kafkaTemplate.send(topicName, key, event);
 
         // 3. Callback (Fire & Forget intelligent)
-        // On ne bloque pas le thread principal, mais on loggue le résultat.
         future.whenComplete((result, ex) -> {
             if (ex == null) {
                 log.info("✅ Event [{}] sent successfully to partition {}", 
                     event.eventId(), result.getRecordMetadata().partition());
             } else {
-                // Ici, dans un vrai système, on pourrait envoyer vers une Dead Letter Queue locale
-                // ou incrémenter une métrique Prometheus "kafka.producer.error"
+                // Here, in a real system, we could send to a local Dead Letter Queue
+                // or increment a Prometheus metric "kafka.producer.error"
                 log.error("❌ Failed to send event [{}]", event.eventId(), ex);
             }
         });

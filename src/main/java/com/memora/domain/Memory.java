@@ -8,6 +8,6 @@ public record Memory(
     UUID id,
     String content,
     Map<String, Object> metadata,
-    Double relevanceScore, // Le score de similarité (ex: 0.85)
+    Double relevanceScore, // The similarity score (e.g., 0.85)
     Instant createdAt
 ) {}

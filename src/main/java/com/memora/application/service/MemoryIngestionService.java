@@ -23,13 +23,10 @@ public class MemoryIngestionService implements IngestMemoryUseCase {
 
     @Override
     public UUID ingest(IngestCommand command) {
-        // 1. Validation métier (Un Tech Lead valide TOUJOURS ses entrées)
         if (command.content() == null || command.content().isBlank()) {
             throw new IllegalArgumentException("Memory content cannot be empty");
         }
 
-        // 2. Mapping de la Commande vers l'Objet du Domaine
-        // On transforme les Strings brutes en Enums typés (Fail Fast si le type est inconnu)
         var event = new MemoryEvent(
             UUID.randomUUID(),
             Instant.now(),
@@ -38,10 +35,8 @@ public class MemoryIngestionService implements IngestMemoryUseCase {
             new MemoryPayload(command.content(), command.metadata())
         );
 
-        // 3. Appel du port de sortie (On ne sait pas que c'est Kafka derrière, et on s'en fiche)
         eventPublisher.publish(event);
 
-        // 4. Retourne l'ID pour que l'API puisse répondre "202 Accepted - ID: xyz"
         return event.eventId();
     }
 }

@@ -9,7 +9,6 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 public class MemoryChatService implements ChatMemoryUseCase {
@@ -26,7 +25,6 @@ public class MemoryChatService implements ChatMemoryUseCase {
 
     @Override
     public String chat(String query, String userId, String userName) {
-        //List<Memory> memories = memoryRepository.findSimilar(query, 5, 0.4);
         List<Memory> memories = memoryRepository.searchHybrid(query, 5);
         
         String context = "";
@@ -34,7 +32,7 @@ public class MemoryChatService implements ChatMemoryUseCase {
             log.info("No relevant memories found for query: {}", query);
         } else {
             // The contents of the found memories are concatenated.
-            // On construit un contexte structuré avec des numéros de rang
+            // We construct a structured context with rank numbers
             StringBuilder contextBuilder = new StringBuilder();
             for (int i = 0; i < memories.size(); i++) {
                 Memory mem = memories.get(i);
@@ -47,26 +45,25 @@ public class MemoryChatService implements ChatMemoryUseCase {
         // Prompt Engineering
         // We give Memora a personality and inject the context into it.
         String systemPrompt = """
-            Tu es Memora, l'assistant personnel intelligent de l'utilisateur : %s.
+            Tu es Memora, l'assistant personnel de l'utilisateur : %s.
             
-            CONTEXTE (Souvenirs disponibles) :
+            CONTEXTE (Souvenirs récupérés) :
             %s
             ---------------------
             
-            TACHE :
-            Fais une synthèse naturelle de la situation pour l'utilisateur en combinant les informations trouvées dans le contexte.
+            CONSIGNES DE RÉPONSE :
+            1. FOCUS : Réponds UNIQUEMENT à la question posée. Ne raconte pas ta vie.
+            2. FILTRAGE : Le contexte contient peut-être des informations inutiles (bruit). Ignore les souvenirs qui n'ont aucun rapport sémantique avec la question.
+            3. EXEMPLE : Si on te demande un nom, donne juste le nom et le contexte direct. Ne parle pas de serveurs ou de météo si ce n'est pas le sujet.
+            4. SYNTHÈSE : Si plusieurs souvenirs répondent à la question, combine-les intelligemment.
+            5. IDENTITÉ : Adresse-toi à l'utilisateur ("Tu").
             
-            CONSIGNES DE RÉDACTION :
-            1. FUSIONNE les informations : Associe la cause technique précise (Source #1) avec le contexte général de la panne (Source #2).
-            2. TON : Parle comme un Tech Lead expérimenté qui fait un rapport oral à son équipe. Sois fluide et professionnel.
-            3. PRÉCISION : Conserve les termes techniques importants (Error 503, Load Balancer, Infrastructure).
-            4. FORMAT : Fais un paragraphe cohérent, pas de liste à puces.
+            Si la réponse n'est pas dans le contexte, dis-le simplement.
             """.formatted(userName, context);
 
         // ...
         log.info("--- PROMPT CONTEXT START ---\n{}\n--- PROMPT CONTEXT END ---", context);
 
-        // 3. GENERATION : Call Mistral via Ollama
         return chatClient.prompt()
                 .system(systemPrompt)
                 .user(query)

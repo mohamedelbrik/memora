@@ -6,8 +6,8 @@ import java.util.List;
 
 public interface MemoryRepository {
     void save(MemoryEvent memory, float[] embedding);
-    
-    // NOUVELLE MÉTHODE
+
+    // TODO To be removed
     List<Memory> findSimilar(String query, int limit, double minScore);
     List<Memory> searchHybrid(String query, int limit);
 

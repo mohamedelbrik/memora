@@ -2,7 +2,6 @@ package com.memora.adapter.in.web;
 
 import com.memora.application.port.in.ChatMemoryUseCase;
 import com.memora.domain.ChatRequest;
-import org.springframework.ai.ollama.api.OllamaApi;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,7 +21,6 @@ public class MemoryChatController {
 
     @PostMapping
     public Map<String, String> chat(@RequestBody ChatRequest request) {
-        // On passe les infos au UseCase
         String answer = chatMemoryUseCase.chat(
                 request.question(),
                 request.userId(),
