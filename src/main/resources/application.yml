@@ -31,8 +31,8 @@ spring:
     ollama:
       base-url: http://localhost:11434 # L'adresse par défaut d'Ollama
       chat:
-        model: mistral # Le modèle pour répondre
-        temperature: 0.3  # <--- AJOUTE ÇA (C'était 0.7 par défaut)
+        model: gemma2 # Le modèle pour répondre
+        temperature: 0.3 # La Liberté qu'a le LLM pour repondre
         top-k: 10         # Limite les choix de mots farfelus
       embedding:
         model: nomic-embed-text # Le modèle pour vectoriser

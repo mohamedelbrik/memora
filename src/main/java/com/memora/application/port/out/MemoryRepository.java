@@ -9,4 +9,7 @@ public interface MemoryRepository {
     
     // NOUVELLE MÉTHODE
     List<Memory> findSimilar(String query, int limit, double minScore);
+    List<Memory> searchHybrid(String query, int limit);
+
+
 }
