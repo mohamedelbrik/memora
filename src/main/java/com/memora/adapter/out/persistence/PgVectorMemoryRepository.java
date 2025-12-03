@@ -1,6 +1,7 @@
 package com.memora.adapter.out.persistence;
 
 import com.memora.application.port.out.MemoryRepository;
+import com.memora.application.service.DateExtractionService;
 import com.memora.domain.Memory;
 import com.memora.domain.MemoryEvent;
 import org.slf4j.Logger;
@@ -12,9 +13,8 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.time.LocalDate;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Component
@@ -72,71 +72,105 @@ public class PgVectorMemoryRepository implements MemoryRepository {
                 .collect(Collectors.toList());
     }
 
-    public List<Memory> searchHybrid(String query, int limit) {
+    // Nouvelle signature : DateRange au lieu de LocalDate
+    public List<Memory> searchHybrid(String query, int limit, DateExtractionService.DateRange dateRange) {
 
         float[] queryVector = embeddingModel.embed(query);
-
+        String queryVectorStr = java.util.Arrays.toString(queryVector);
         String lexicalQuery = query.replaceAll("[^a-zA-Z0-9ä-ü\\s]", "").trim().replaceAll("\\s+", " | ");
-        // We select s.rank and l.rank for debugging
+        int poolSize = limit * 2;
+
+        String dateClause = "";
+
+        // --- LOGIQUE FILTRE DATE ---
+        if (dateRange != null) {
+            // On filtre entre le début (00:00) et la fin (23:59 du jour de fin)
+            // On utilise CAST pour éviter les erreurs JDBC
+            dateClause = " AND ingested_at >= CAST(? AS timestamptz) AND ingested_at < CAST(? AS timestamptz) + INTERVAL '1 day' ";
+        }
+        // ---------------------------
+
         String sql = """
             WITH semantic_rank AS (
-                SELECT id, 
-                       RANK() OVER (ORDER BY embedding <=> ?::vector) as rank
+                SELECT id, RANK() OVER (ORDER BY embedding <=> CAST(? AS vector)) as rank
                 FROM vector_store
-                ORDER BY embedding <=> ?::vector
+                WHERE 1=1 %s 
+                ORDER BY embedding <=> CAST(? AS vector)
                 LIMIT ?
             ),
             lexical_rank AS (
-               SELECT id,\s
-                      -- We use to_tsquery instead of plainto_tsquery to support the syntax with '|'
-                      RANK() OVER (ORDER BY ts_rank(content_search, to_tsquery('simple', ?)) DESC) as rank
-               FROM vector_store
-               WHERE content_search @@ to_tsquery('simple', ?)
-               LIMIT ?
-           )
-           SELECT v.id, v.content, v.metadata,
-                  s.rank as sem_rank,
-                  l.rank as lex_rank,
-                  COALESCE(1.0 / (60 + s.rank), 0.0) + (10.0 * COALESCE(1.0 / (60 + l.rank), 0.0)) as rrf_score
-           FROM vector_store v
-           LEFT JOIN semantic_rank s ON v.id = s.id
-           LEFT JOIN lexical_rank l ON v.id = l.id
-           WHERE s.id IS NOT NULL OR l.id IS NOT NULL
-           ORDER BY rrf_score DESC
-           LIMIT ?
+                SELECT id, RANK() OVER (ORDER BY ts_rank(content_search, to_tsquery('simple', ?)) DESC) as rank
+                FROM vector_store
+                WHERE content_search @@ to_tsquery('simple', ?)
+                %s 
+                LIMIT ?
+            )
+            SELECT v.id, v.content, v.metadata,
+                   COALESCE(1.0 / (60 + s.rank), 0.0) + (10.0 * COALESCE(1.0 / (60 + l.rank), 0.0)) as rrf_score
+            FROM vector_store v
+            LEFT JOIN semantic_rank s ON v.id = s.id
+            LEFT JOIN lexical_rank l ON v.id = l.id
+            WHERE s.id IS NOT NULL OR l.id IS NOT NULL
+            ORDER BY rrf_score DESC
+            LIMIT ?
+        """.formatted(dateClause, dateClause);
+
+        List<Object> args = new ArrayList<>();
+
+        // -- SEMANTIC --
+        args.add(queryVectorStr);
+        if (dateRange != null) {
+            args.add(dateRange.start()); // ? 1
+            args.add(dateRange.end());   // ? 2
+        }
+        args.add(queryVectorStr);
+        args.add(poolSize);
+
+        // -- LEXICAL --
+        args.add(lexicalQuery);
+        args.add(lexicalQuery);
+        if (dateRange != null) {
+            args.add(dateRange.start()); // ? 1
+            args.add(dateRange.end());   // ? 2
+        }
+        args.add(poolSize);
+
+        // -- LIMIT --
+        args.add(limit);
+
+        return jdbcTemplate.query(sql, args.toArray(), (rs, rowNum) -> new Memory(
+                UUID.fromString(rs.getString("id")),
+                rs.getString("content"),
+                null,
+                rs.getDouble("rrf_score"),
+                null
+        ));
+    }
+
+    // Nouvelle méthode pour le mode "Journal / Timeline"
+    public List<Memory> findByDateRange(DateExtractionService.DateRange range) {
+        String sql = """
+            SELECT id, content, metadata, 1.0 as score
+            FROM vector_store
+            WHERE ingested_at >= CAST(? AS timestamptz) 
+              AND ingested_at < CAST(? AS timestamptz) + INTERVAL '1 day'
+            ORDER BY ingested_at ASC
         """;
 
-        int candidatePoolSize = limit * 2;
-
         return jdbcTemplate.query(sql,
-                new Object[]{
-                        queryVector, queryVector, candidatePoolSize,
-                        lexicalQuery, lexicalQuery, candidatePoolSize, // <--- We switch to the "OR" version here
-                        limit
-                },
-                (rs, rowNum) -> {
-                    // --- DEBUG ZONE / TÉLÉMÉTRIE ---
-                    String content = rs.getString("content");
-                    double score = rs.getDouble("rrf_score");
-                    // getLong returns 0 if it's NULL in SQL (i.e., not found).
-                    long semRank = rs.getLong("sem_rank");
-                    long lexRank = rs.getLong("lex_rank");
-
-                    String snippet = content.length() > 50 ? content.substring(0, 50) + "..." : content;
-
-                    // A clean table is displayed in the console.
-                    System.out.printf("📊 [RRF DEBUG] Score: %.6f | SemRank: %-4d | LexRank: %-4d | %s%n",
-                            score, semRank, lexRank, snippet);
-                    // -----------------------------------
-
-                    return new Memory(
-                            UUID.fromString(rs.getString("id")),
-                            content,
-                            null,
-                            score,
-                            null
-                    );
-                }
+                new Object[]{ range.start(), range.end() },
+                (rs, rowNum) -> new Memory(
+                        UUID.fromString(rs.getString("id")),
+                        rs.getString("content"),
+                        null, // Metadata mapping simplifié
+                        1.0,  // Score max car c'est une correspondance exacte de date
+                        null
+                )
         );
+    }
+
+    @Override
+    public int countMemoriesByKeyword(String keyword) {
+        return 0;
     }
 }
