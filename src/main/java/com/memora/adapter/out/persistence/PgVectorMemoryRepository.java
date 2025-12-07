@@ -13,8 +13,10 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDate;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
@@ -49,28 +51,28 @@ public class PgVectorMemoryRepository implements MemoryRepository {
         log.info("💾 Memory [{}] saved to Postgres with Metadata", event.eventId());
     }
 
-    @Override
-    public List<Memory> findSimilar(String query, int limit, double minScore) {
-        // Appel magique à Spring AI + Postgres
-        List<Document> documents = vectorStore.similaritySearch(
-                SearchRequest.query(query)
-                        .withTopK(limit) // Nombre de résultats max
-                        .withSimilarityThreshold(minScore) // Score minimum (0.0 à 1.0)
-        );
-
-        // Mapping Document (Spring AI) -> Memory (Domain)
-        return documents.stream()
-                .map(doc -> new Memory(
-                        UUID.fromString(doc.getId()),
-                        doc.getContent(),
-                        doc.getMetadata(),
-                        doc.getMetadata().containsKey("distance")
-                                ? 1.0 - ((Number) doc.getMetadata().get("distance")).doubleValue()
-                                : null,
-                        null
-                ))
-                .collect(Collectors.toList());
-    }
+//    @Override
+//    public List<Memory> findSimilar(String query, int limit, double minScore) {
+//        // Appel magique à Spring AI + Postgres
+//        List<Document> documents = vectorStore.similaritySearch(
+//                SearchRequest.query(query)
+//                        .withTopK(limit) // Nombre de résultats max
+//                        .withSimilarityThreshold(minScore) // Score minimum (0.0 à 1.0)
+//        );
+//
+//        // Mapping Document (Spring AI) -> Memory (Domain)
+//        return documents.stream()
+//                .map(doc -> new Memory(
+//                        UUID.fromString(doc.getId()),
+//                        doc.getContent(),
+//                        doc.getMetadata(),
+//                        doc.getMetadata().containsKey("distance")
+//                                ? 1.0 - ((Number) doc.getMetadata().get("distance")).doubleValue()
+//                                : null,
+//                        null
+//                ))
+//                .collect(Collectors.toList());
+//    }
 
     // Nouvelle signature : DateRange au lieu de LocalDate
     public List<Memory> searchHybrid(String query, int limit, DateExtractionService.DateRange dateRange) {
@@ -171,6 +173,30 @@ public class PgVectorMemoryRepository implements MemoryRepository {
 
     @Override
     public int countMemoriesByKeyword(String keyword) {
-        return 0;
+        // Cas 1 : Tout compter (Si mot-clé est "*" ou vide)
+        if (keyword == null || keyword.trim().equals("*") || keyword.trim().isEmpty()) {
+            String sql = "SELECT COUNT(*) FROM vector_store";
+            Integer count = jdbcTemplate.queryForObject(sql, Integer.class);
+            return count != null ? count : 0;
+        }
+
+        // Cas 2 : Compter par mot-clé (Recherche insensible à la casse)
+        // ILIKE est spécifique à Postgres et permet de trouver "Kafka" même si on cherche "kafka"
+        String sql = "SELECT COUNT(*) FROM vector_store WHERE content ILIKE ?";
+
+        // On ajoute les % pour dire "contient ce mot n'importe où"
+        String searchPattern = "%" + keyword.trim() + "%";
+
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, searchPattern);
+        return count != null ? count : 0;
+    }
+
+    @Override
+    public void deleteByUserId(String userId) {
+        // On cible le champ 'user_id' à l'intérieur du JSON metadata
+        String sql = "DELETE FROM vector_store WHERE metadata->>'user_id' = ?";
+
+        int deletedRows = jdbcTemplate.update(sql, userId);
+        log.info("🗑️ GDPR PURGE: Deleted {} memories for user [{}]", deletedRows, userId);
     }
 }

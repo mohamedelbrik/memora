@@ -16,9 +16,10 @@ public class MemorySearchService implements SearchMemoryUseCase {
         this.memoryRepository = memoryRepository;
     }
 
-    @Override
-    public List<Memory> search(String query) {
-        // Business rule: we want the 5 most relevant with a score > 0.5
-        return memoryRepository.findSimilar(query, 5, 0.3);
-    }
+    // TODO to be remove
+//    @Override
+//    public List<Memory> search(String query) {
+//        // Business rule: we want the 5 most relevant with a score > 0.5
+//        return memoryRepository.findSimilar(query, 10, 0.3);
+//    }
 }

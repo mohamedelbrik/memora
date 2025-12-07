@@ -11,7 +11,7 @@ public interface MemoryRepository {
     void save(MemoryEvent memory, float[] embedding);
 
     // TODO To be removed
-    List<Memory> findSimilar(String query, int limit, double minScore);
+    //List<Memory> findSimilar(String query, int limit, double minScore);
     List<Memory> searchHybrid(String query, int limit, DateExtractionService.DateRange dateRange);
 
     // La méthode Timeline
@@ -19,5 +19,8 @@ public interface MemoryRepository {
 
     // --- AJOUTE CELLE-CI ---
     int countMemoriesByKeyword(String keyword);
+
+    // Suppression de toutes les données d'un utilisateur (GDPR Right to Erasure)
+    void deleteByUserId(String userId);
 
 }

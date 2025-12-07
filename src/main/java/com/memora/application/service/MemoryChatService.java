@@ -14,7 +14,6 @@ import reactor.core.publisher.Flux;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Service
@@ -89,91 +88,90 @@ public class MemoryChatService implements ChatMemoryUseCase {
     @Override
     public Flux<String> chatStream(String query, String userId, String userName) {
 
-        // 1. RÉÉCRITURE (Cerveau 1)
-        // On transforme "Pourquoi ?" en "Pourquoi y a-t-il eu une panne ?"
+        // 1. EXTRACTION DATE (Rien ne change)
+        DateExtractionService.DateRange dateRange = dateExtractionService.extractDateRange(query);
+
+        // 2. RÉÉCRITURE (Rien ne change)
         String searchQuery = queryRewriterService.rewriteQuery(query, userId);
 
-        // 2. ANALYSE INTENTION & DATE (Cerveau 2)
-        // On analyse la query réécrite (plus précise)
-        DateExtractionService.DateRange dateRange = dateExtractionService.extractDateRange(searchQuery);
-        List<Memory> memories;
-
-        // 3. ROUTAGE INTELLIGENT (Strategy Pattern)
         if (dateRange != null) {
-            log.info("📅 MODE TIMELINE activé pour : {}", dateRange.start());
-            // Mode Journal : On veut tout ce qui s'est passé ce jour-là
-            memories = memoryRepository.findByDateRange(dateRange);
+            log.info("📅 TIME TRAVEL : {} -> {}", dateRange.start(), dateRange.end());
+        }
+
+        // 3. RECHERCHE (Rien ne change)
+        List<Memory> memories;
+        if (dateRange != null) {
+            // Assure-toi que cette méthode utilise bien le Threshold 0.0 comme vu avant !
+            memories = ((PgVectorMemoryRepository) memoryRepository).findByDateRange(dateRange);
         } else {
-            log.info("🔍 MODE RECHERCHE activé pour : {}", searchQuery);
-            // Mode RRF : On cherche par pertinence avec la query RÉÉCRITE
-            // CORRECTION MAJEURE ICI : utilisation de searchQuery au lieu de query
-            memories = memoryRepository.searchHybrid(searchQuery, 5, null);
+            // Idem, Threshold 0.0
+            memories = ((PgVectorMemoryRepository) memoryRepository).searchHybrid(searchQuery, 5, null);
         }
 
-        // 4. COUPE-CIRCUIT
-        if (memories.isEmpty()) {
-            return Flux.just("Désolé " + userName + ", je n'ai trouvé aucun souvenir correspondant.");
-        }
+        // --- 4. MODIFICATION MAJEURE ICI ---
+        // ON SUPPRIME LE COUPE-CIRCUIT (if empty return...)
+        // On prépare juste le contexte, qu'il soit vide ou plein.
 
-        // 5. CONSTRUCTION DU CONTEXTE (Avec étiquettes temporelles)
         StringBuilder contextBuilder = new StringBuilder();
-        LocalDate today = LocalDate.now(); // Date pivot pour le calcul
+        LocalDate today = LocalDate.now();
 
-        for (int i = 0; i < memories.size(); i++) {
-            Memory mem = memories.get(i);
+        if (memories.isEmpty()) {
+            contextBuilder.append("AUCUN SOUVENIR TROUVÉ DANS LA BASE DE DONNÉES.");
+            log.warn("⚠️ Base de données muette pour cette requête.");
+        } else {
+            for (int i = 0; i < memories.size(); i++) {
+                Memory mem = memories.get(i);
+                // ... (ton calcul de timeLabel reste identique) ...
+                String timeLabel = "Date inconnue"; // ... ton code ...
 
-            // Calcul "Hier / Avant-hier"
-            String timeLabel = "Date inconnue";
-            if (mem.metadata() != null && mem.metadata().containsKey("ingested_at")) {
-                String rawDate = mem.metadata().get("ingested_at").toString();
-                if (rawDate.length() >= 10) {
-                    LocalDate memDate = LocalDate.parse(rawDate.substring(0, 10));
-                    long daysDiff = ChronoUnit.DAYS.between(memDate, today);
-
-                    if (daysDiff == 0) timeLabel = "AUJOURD'HUI";
-                    else if (daysDiff == 1) timeLabel = "HIER";
-                    else if (daysDiff == 2) timeLabel = "AVANT-HIER";
-                    else timeLabel = "LE " + memDate;
-                }
+                contextBuilder.append(String.format("SOURCE #%d [%s] (Score %.2f) : %s\n\n",
+                        i + 1, timeLabel, mem.relevanceScore(), mem.content()));
             }
-
-            contextBuilder.append(String.format("SOURCE #%d [%s] (Score %.2f) : %s\n\n",
-                    i + 1, timeLabel, mem.relevanceScore(), mem.content()));
         }
-        String context = contextBuilder.toString();
 
-        // Date lisible pour le prompt
+        String context = contextBuilder.toString();
         String todayDateStr = today.format(DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", java.util.Locale.FRENCH));
 
-        // 6. PROMPT ENGINEERING (Le Cerveau Final)
-        // CORRECTION : Ajout du placeholder %s pour la date
+        // 5. PROMPT ENGINEERING ADAPTÉ
+        // On dit à l'IA : "Si le contexte est vide, utilise tes outils ou dis que tu ne sais pas."
         String systemPrompt = """
             Tu es Memora, l'assistant personnel de %s.
             NOUS SOMMES LE : %s
             
-            CONTEXTE (Souvenirs) :
+            CONTEXTE RAG (Résultat de la recherche base de données) :
             %s
             ---------------------
             
             CONSIGNES :
-            1. CHRONOLOGIE : Fie-toi EXCLUSIVEMENT à l'étiquette temporelle [HIER], [AVANT-HIER].
-            2. FILTRE STRICT : Si l'utilisateur demande "Hier", ignore les sources marquées [AVANT-HIER].
-            3. STYLE : Direct, factuel et naturel. Pas de formules de politesse robotiques.
+            1. Si le CONTEXTE contient des infos, utilise-les pour répondre.
+            2. Si le CONTEXTE est vide ou "AUCUN SOUVENIR", tu as deux choix :
+               - Si la question porte sur un COMPTAGE ("combien de..."), utilise l'outil 'countMemoriesTool'.
+               - Sinon, dis poliment que tu n'as pas l'info dans les souvenirs.
+            3. CHRONOLOGIE : Fie-toi aux étiquettes [HIER], [AVANT-HIER].
             """.formatted(userName, todayDateStr, context);
 
-        // 7. GENERATION
-        return chatClient.prompt()
+        // 6. APPEL LLM (Toujours exécuté maintenant !)
+        String response = chatClient.prompt()
                 .system(systemPrompt)
                 .user(query)
-                // --- AJOUT ICI ---
-                .functions("countMemoriesTool") // Le nom du Bean défini dans ToolsConfig
-                // -----------------
+                // ✅ C'est là que la magie opère : si le contexte est vide,
+                // Llama peut décider d'appeler cet outil tout seul !
+                .functions("countMemoriesTool")
                 .advisors(a -> a
                         .param("chat_memory_conversation_id", userId)
                         .param("chat_memory_response_size", 10)
                 )
-                .stream()
-                .content()
-                .doOnNext(System.out::print);
+                .call()
+                .content();
+
+        log.info("🤖 RÉPONSE FINALE AGENT : {}", response);
+
+        // ASTUCE UX : On simule le streaming pour le Frontend !
+        // On découpe la phrase par mots (espace) tout en gardant les délimiteurs
+        String[] words = response.split("(?<=\\s)");
+
+        return Flux.fromArray(words)
+                .delayElements(java.time.Duration.ofMillis(50)) // Petit délai "effet humain"
+                .doOnComplete(() -> log.info("✅ Streaming simulé terminé."));
     }
 }

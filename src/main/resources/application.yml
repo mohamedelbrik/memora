@@ -9,10 +9,11 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: update # En prod, on mettra 'validate'
+      ddl-auto: update
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+
   kafka:
     bootstrap-servers: localhost:9092
     producer:
@@ -26,17 +27,48 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
-        spring.json.trusted.packages: "com.memora.domain"
+        spring.json.trusted.packages: "*" # On fait confiance à tout pour le dev
+
   ai:
     ollama:
-      base-url: http://localhost:11434 # L'adresse par défaut d'Ollama
+      base-url: http://localhost:11434
+      init:
+        pull-model-strategy: never # TRES IMPORTANT : On interdit à Spring de télécharger, c'est toi qui gères via le terminal
+
+      # Configuration du Chat (Cerveau)
       chat:
-        model: mistral # Le modèle pour répondre
-        temperature: 0.3 # La Liberté qu'a le LLM pour repondre
-        top-k: 10         # Limite les choix de mots farfelus
+        options: # Il faut mettre ça sous 'options'
+          model: llama3.1
+          temperature: 0.3
+          top-k: 10
+
+      # Configuration de l'Embedding (Mémoire)
       embedding:
-        model: nomic-embed-text # Le modèle pour vectoriser
+        options: # Idem ici
+          model: nomic-embed-text
+
 memora:
   kafka:
     topics:
       ingest: "memora-ingest-events-v1"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+logging:
+  level:
+    org.springframework.ai: DEBUG
+    org.springframework.web.client: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE # Pour voir les valeurs des ?

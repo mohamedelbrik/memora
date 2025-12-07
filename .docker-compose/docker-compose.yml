@@ -62,6 +62,43 @@ services:
     networks:
       - memora-network
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: memora-prometheus
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - memora-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: memora-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin # Mot de passe par défaut
+    depends_on:
+      - prometheus
+    networks:
+      - memora-network
+
+    # ... (tes autres services)
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: memora-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@memora.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - memora-network
+
 volumes:
   postgres_data:
 

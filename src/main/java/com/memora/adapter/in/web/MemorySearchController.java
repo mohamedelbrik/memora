@@ -19,8 +19,8 @@ public class MemorySearchController {
         this.searchMemoryUseCase = searchMemoryUseCase;
     }
 
-    @GetMapping("/search")
-    public List<Memory> search(@RequestParam("q") String query) {
-        return searchMemoryUseCase.search(query);
-    }
+//    @GetMapping("/search")
+//    public List<Memory> search(@RequestParam("q") String query) {
+//        return searchMemoryUseCase.search(query);
+//    }
 }

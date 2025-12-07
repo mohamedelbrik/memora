@@ -4,5 +4,6 @@ import com.memora.domain.Memory;
 import java.util.List;
 
 public interface SearchMemoryUseCase {
-    List<Memory> search(String query);
+    // TODO to be remove
+    //List<Memory> search(String query);
 }

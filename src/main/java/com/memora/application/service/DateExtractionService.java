@@ -3,6 +3,7 @@ package com.memora.application.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.ollama.api.OllamaOptions;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -21,6 +22,16 @@ public class DateExtractionService {
     }
 
     public DateRange extractDateRange(String query) {
+        // 0. HEURISTIQUE SUPRÊME : Date Explicite (YYYY-MM-DD)
+        // Si l'utilisateur donne une date précise, on la prend direct.
+        Pattern isoDatePattern = Pattern.compile("\\b(\\d{4}-\\d{2}-\\d{2})\\b");
+        Matcher isoMatcher = isoDatePattern.matcher(query);
+        if (isoMatcher.find()) {
+            String dateStr = isoMatcher.group(1);
+            LocalDate date = LocalDate.parse(dateStr);
+            log.info("🎯 Direct Date Match found: {}", date);
+            return new DateRange(date, date);
+        }
         String lowerQuery = query.toLowerCase();
         LocalDate today = LocalDate.now();
 
@@ -40,32 +51,36 @@ public class DateExtractionService {
             return new DateRange(today, today);
         }
 
-        // Prompt spécialisé "Extraction de Date"
+        // Prompt DURCI avec Exemples Négatifs (Few-Shot)
         String prompt = """
-            DATE ACTUELLE : %s
-            QUERY UTILISATEUR : "%s"
-            
-            TACHE : Analyse la query. Si elle contient une référence temporelle (ex: "hier", "avant-hier", "lundi dernier", "en janvier"), calcule la plage de dates correspondante.
-            
-            RÈGLES :
-            1. "Avant-hier" = Date actuelle - 2 jours.
-            2. "Hier" = Date actuelle - 1 jour.
-            3. Si aucune référence temporelle n'est trouvée, réponds "NULL".
-            
-            FORMAT DE RÉPONSE ATTENDU (Strictement) :
-            START=YYYY-MM-DD;END=YYYY-MM-DD
-            
-            Exemple de réponse : START=2025-11-26;END=2025-11-26
-            """.formatted(today, query);
+        DATE ACTUELLE : %s
+        QUERY UTILISATEUR : "%s"
+        
+        TACHE : Extrais une plage de date UNIQUEMENT si l'utilisateur mentionne une période temporelle EXPLICITE.
+        
+        CAS CLASSIQUES (Tu DOIS répondre NULL) :
+        - "Combien de souvenirs ?" -> NULL
+        - "Quel est le total ?" -> NULL
+        - "Parle moi de Kafka" -> NULL
+        - "Je veux des statistiques" -> NULL
+        - "Qui suis-je ?" -> NULL
+        
+        CAS TEMPORELS (Tu DOIS répondre START=...;END=...) :
+        - "Hier" -> START=...;END=...
+        - "En janvier 2024" -> START=2024-01-01;END=2024-01-31
+        - "La semaine dernière" -> ...
+        
+        FORMAT DE RÉPONSE : START=YYYY-MM-DD;END=YYYY-MM-DD ou NULL
+        """.formatted(today, query);
 
         String response = chatClient.prompt()
-                .system("Tu es un extracteur de dates. Tu ne parles pas, tu ne dis pas bonjour. Tu sors uniquement le format demandé.")
+                .system("Tu es un moteur logique binaire. Tu ne devines jamais. Au moindre doute, c'est NULL.")
                 .user(prompt)
+                .options(OllamaOptions.builder().withTemperature(0.0).build()) // ZERO Créativité
                 .call()
                 .content();
 
         log.info("📆 Date Extractor Response: {}", response);
-
         return parseResponse(response);
     }
 

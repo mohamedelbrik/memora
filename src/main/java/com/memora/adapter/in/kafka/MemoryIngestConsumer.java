@@ -3,6 +3,8 @@ package com.memora.adapter.in.kafka;
 
 import com.memora.application.port.out.MemoryRepository;
 import com.memora.domain.MemoryEvent;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -18,15 +20,18 @@ public class MemoryIngestConsumer {
 
     private final EmbeddingModel embeddingModel;
     private final MemoryRepository memoryRepository;
+    private final MeterRegistry meterRegistry;
 
-    public MemoryIngestConsumer(EmbeddingModel embeddingModel, MemoryRepository memoryRepository) {
+    public MemoryIngestConsumer(EmbeddingModel embeddingModel, MemoryRepository memoryRepository, MeterRegistry meterRegistry) {
         this.embeddingModel = embeddingModel;
         this.memoryRepository = memoryRepository;
+        this.meterRegistry = meterRegistry;
     }
 
     @KafkaListener(topics = "${memora.kafka.topics.ingest}", groupId = "memora-group")
     public void process(MemoryEvent event) {
         log.info("🧠 Processing memory event: {}", event.eventId());
+        Timer.Sample sample = Timer.start(meterRegistry);
 
         try {
             String content = event.payload().content();
@@ -39,9 +44,18 @@ public class MemoryIngestConsumer {
             memoryRepository.save(event, vector);
 
             log.info("✅ Memory [{}] fully processed and indexed.", event.eventId());
+            // On arrête le chrono et on enregistre
+            sample.stop(Timer.builder("memora.ingestion.latency")
+                    .description("Temps pris pour vectoriser et stocker un souvenir")
+                    .tag("source", event.source().toString()) // On tague par source (WEB, MOBILE...)
+                    .register(meterRegistry));
+
+            // On incrémente un compteur
+            meterRegistry.counter("memora.memories.ingested", "status", "success").increment();
 
         } catch (Exception e) {
             log.error("❌ Error processing memory event [{}]: {}", event.eventId(), e.getMessage(), e);
+            meterRegistry.counter("memora.memories.ingested", "status", "error").increment();
         }
     }
 }
